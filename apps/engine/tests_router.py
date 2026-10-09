@@ -11,7 +11,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from citty.router import DEFAULT_DOMAIN, HeuristicRouter, NoopRouter  # noqa: E402
+from citty.heuristic import HeuristicRouter  # noqa: E402
+from citty.router import DEFAULT_DOMAIN, NoopRouter  # noqa: E402
 
 # (说明, 正文, 元数据, 期望领域)
 CASES = [
