@@ -36,6 +36,10 @@ logs/
 # 例外中的例外：3.6MB 的开发截图不提交（git 是最后匹配的规则生效，所以必须写在反选后面）
 out/screen.png
 
+# 每次跑测试都会被重写的临时产物（doc 14 写明"每次运行自动重写"）：
+# 跟踪它 = 每次跑完 test-p1/file 工作区都变脏，迟早被误提交。真正的 P1 证据是 longrun.srt。
+out/selftest.srt
+
 # 编辑器
 .vscode/
 .idea/
