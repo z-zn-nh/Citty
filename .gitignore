@@ -1,0 +1,40 @@
+# 虚拟环境与构建产物
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# 密钥：只保留 .env.example（config*.yaml 里不放 key，key 都在 .env）
+.env
+*.key
+
+# 模型权重（唯一的 228MB 本地 ASR 模型，用 docs/13 的命令重新下载）
+models/
+*.onnx
+*.gguf
+*.safetensors
+*.pth
+*.pt
+
+# 音视频素材与大体积运行产物（可重建，不进仓库）
+*.wav
+*.mp3
+*.m4a
+out/samples/
+out/_*
+*.log
+logs/
+
+# 但 out/ 里小体积的**证据文件**要留（docs/14、docs/15 正文引用了它们）
+!out/*.srt
+!out/*.csv
+!out/*.json
+!out/*.png
+!out/*.txt
+
+# 例外中的例外：3.6MB 的开发截图不提交（git 是最后匹配的规则生效，所以必须写在反选后面）
+out/screen.png
+
+# 编辑器
+.vscode/
+.idea/

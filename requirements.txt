@@ -1,0 +1,13 @@
+# Citty 引擎运行依赖（本地不下载任何模型，全部走云端 API）
+# 安装：uv pip install -r requirements.txt
+fastapi>=0.110
+uvicorn[standard]>=0.29
+httpx>=0.27
+numpy>=1.26
+PyYAML>=6.0
+python-dotenv>=1.0
+websocket-client>=1.7
+
+# 音频捕获（Windows WASAPI loopback，纯 Python，无需编译）
+soundcard>=0.4.3
+sounddevice>=0.4.6

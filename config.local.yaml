@@ -1,0 +1,64 @@
+# 本地档（P1 全本地）：ASR 用 sherpa-onnx + SenseVoice int8，翻译仍用哔哩哔哩免费接口（无需 key）
+#
+# 需要的东西只有两个文件（约 0.22 GB），下载命令见 docs/13-P1本地部署最简方案.md：
+#   model.int8.onnx  +  tokens.txt  →  D:\Citty\models\sensevoice-onnx\
+#
+# 用法：
+#   .\run.ps1 doctor -Config D:\Citty\config.local.yaml
+#   .\run.ps1 -Config D:\Citty\config.local.yaml file out\samples\official_en.wav 20
+
+asr:
+  backend: local_sherpa          # local_sherpa | openai_compat | chat_audio | mock
+  local:
+    model: D:\Citty\models\sensevoice-onnx\model.int8.onnx
+    tokens: D:\Citty\models\sensevoice-onnx\tokens.txt
+    num_threads: 8               # i7-12850HX 16C/24T，8 线程实测已能实时
+    provider: cpu                # cpu | cuda（这台机器没装 CUDA 版 onnxruntime，保持 cpu）
+    language: ""                 # 空 = 自动识别 zh/en/ja/ko/yue
+    use_itn: true                # 数字和标点规范化（"3.2吉赫兹" 之类）
+    warmup: true                 # 启动即载入，避免第一句字幕慢一拍
+
+  candidates:                    # citty ab 用（本地模型不参与，保留云端候选做对照）
+    - name: sensevoice-cloud
+      base_url: https://api.siliconflow.cn/v1
+      model: FunAudioLLM/SenseVoiceSmall
+      api_key_env: SILICONFLOW_API_KEY
+      timeout_s: 60
+
+mt:
+  backend: bilibili_free         # 免费、无需 key；本地档也用它，省掉 1.37GB 的本地 MT
+  target_lang: zh-Hans
+  source_lang: auto
+  timeout_s: 20
+
+audio:
+  source: loopback             # 真机实时（抓系统声音）；测文件用 `citty file` 会自动切成 file
+  # ⚠️ 这台机器的**默认输出设备是"死流"**（Senary Audio 的 loopback 录到纯静音 -180 dBFS）。
+  #    网易虚拟音频设备的 loopback 是通的（实测 -31 dBFS）。换机器请先用：
+  #      python tools\probe_loopback.py --sweep
+  #    找到能抓的那个设备名，照抄到这里。
+  device: 扬声器 (网易虚拟音频设备)
+  sample_rate: 16000
+  block_ms: 50
+  file: out\samples\official_en.wav
+  file_realtime: true
+
+segmenter:
+  threshold_db: -42.0
+  min_speech_ms: 320
+  max_speech_ms: 12000
+  silence_ms: 420
+
+overlay:
+  mode: bilingual
+  font_family: Microsoft YaHei UI
+  tgt_font_size: 26
+  src_font_size: 16
+  width_pct: 0.62
+  bottom_margin_px: 96
+  alpha: 0.92
+
+logging:
+  level: INFO
+  save_srt: true
+  srt_dir: out

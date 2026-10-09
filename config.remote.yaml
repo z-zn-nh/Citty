@@ -1,0 +1,85 @@
+# Citty remote profile: ASR + MT both served by YOUR OWN server, reached through an SSH tunnel.
+# 本文件是 config.yaml 的"远端版"：结构完全一致，只把 asr/mt 指向 127.0.0.1 的隧道端口。
+# 用法：先建隧道，再用这份配置跑
+#     .\deploy\tunnel.ps1 -Server SERVER_IP -User root        # 窗口一：建隧道（-Check 可自检）
+#     .\run.ps1 -Config D:\Citty\config.remote.yaml file out\samples\official_en.wav 30
+# 隧道把服务器的 8001/8002 映射到本地同号端口，所以这里写 127.0.0.1 —— 看起来就像本地服务。
+
+server:
+  host: 127.0.0.1
+  port: 8756
+
+audio:
+  source: mock            # 真看视频改成 loopback
+  device: null
+  file: null
+  loop_file: true
+  sample_rate: 16000
+  block_ms: 50
+  file_realtime: true
+
+vad:
+  enabled: true
+  energy_threshold_db: -42.0
+  min_speech_ms: 250
+  silence_commit_ms: 350
+  max_segment_ms: 8000
+  min_segment_ms: 400
+
+asr:
+  backend: openai_compat
+  openai_compat:
+    api_style: transcriptions
+    base_url: http://127.0.0.1:8001/v1     # ← 服务器的 8001，经 SSH 隧道过来
+    api_key_env: CITTY_ASR_KEY             # 在 D:\Citty\.env 里写 CITTY_ASR_KEY=...
+    model: sensevoice-local
+    language: null
+    timeout_s: 60
+
+  # 远端 A/B 候选：同一台服务器上的不同服务，或"远端 vs 云端"直接对比
+  candidates:
+    - name: remote-sensevoice
+      api_style: transcriptions
+      base_url: http://127.0.0.1:8001/v1
+      api_key_env: CITTY_ASR_KEY
+      model: sensevoice-local
+      language: null
+    - name: cloud-siliconflow-qwen3-asr
+      api_style: transcriptions
+      base_url: https://api.siliconflow.cn/v1
+      api_key_env: SILICONFLOW_API_KEY
+      model: Qwen/Qwen3-ASR-1.7B
+      language: null
+
+mt:
+  backend: openai_compat
+  source_lang: auto
+  target_lang: zh-Hans
+  context_sentences: 3
+  glossary: {}
+  corrector:
+    enabled: true
+    delay_s: 0.4
+  bilibili_free:                            # 保留：云端翻译作为断网/降级备选
+    base_url: https://index-translate.bilibili.com/v1
+    model: Index-Translate-35B-A3B
+    timeout_s: 30
+  openai_compat:
+    base_url: http://127.0.0.1:8002/v1      # ← 服务器的 8002（llama.cpp 的 Hy-MT2）
+    api_key_env: CITTY_MT_KEY               # 在 D:\Citty\.env 里写 CITTY_MT_KEY=...
+    model: Hy-MT2-1.8B-Q6_K                 # llama-server 不校验 model 名，写清楚方便看日志
+    timeout_s: 30
+
+overlay:
+  mode: bilingual
+  font_family: Microsoft YaHei UI
+  tgt_font_size: 26
+  src_font_size: 16
+  width_pct: 0.62
+  bottom_margin_px: 96
+  alpha: 0.92
+
+logging:
+  level: INFO
+  save_srt: true
+  srt_dir: out

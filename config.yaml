@@ -1,0 +1,119 @@
+# Citty 配置 · 默认全部走云端，不下载任何本地模型
+server:
+  host: 127.0.0.1
+  port: 8756
+
+audio:
+  # mock = 合成语音（无需麦克风/key，用于跑通全链路）
+  # loopback = 抓系统扬声器输出（真正看视频用这个）
+  # mic = 麦克风
+  # file = 读取 wav 文件
+  source: mock
+  device: null            # null = 默认扬声器 loopback / 默认麦克风；也可填设备名片段
+  file: null              # source=file 时的 wav 路径
+  loop_file: true
+  sample_rate: 16000
+  block_ms: 50
+
+vad:
+  enabled: true
+  energy_threshold_db: -42.0   # 越低越敏感；环境吵就调到 -35
+  min_speech_ms: 250
+  silence_commit_ms: 350       # 静音多久判定一句结束（越小越快、越容易断句）
+  max_segment_ms: 8000         # 单句最长（超长强制切）
+  min_segment_ms: 400
+
+asr:
+  # mock | openai_compat | chat_audio
+  #   openai_compat = POST /audio/transcriptions（硅基流动 / Groq / OpenAI）
+  #   chat_audio    = POST /chat/completions 带音频（阿里百炼 qwen3-asr-flash、自建 vLLM Qwen3-ASR）
+  backend: openai_compat
+  openai_compat:
+    api_style: transcriptions
+    base_url: https://api.siliconflow.cn/v1      # 硅基流动（国内直连，已实测可用）
+    api_key_env: SILICONFLOW_API_KEY
+    model: Qwen/Qwen3-ASR-1.7B   # 实测 15.1s 英文 / RTF 0.173；中文样例与 SenseVoice 输出一致
+    language: null          # null = 自动；en / zh
+    timeout_s: 60
+    # 其它可选端点（把 base_url/model/环境变量名换掉即可）：
+    #   Groq:          https://api.groq.com/openai/v1                    whisper-large-v3-turbo
+    #   OpenAI:        https://api.openai.com/v1                         whisper-1 / gpt-4o-mini-transcribe
+    #   阿里百炼:      https://dashscope.aliyuncs.com/compatible-mode/v1  qwen3-asr-flash   (api_style: chat_audio)
+    #                  —— 需先在控制台开通模型服务（否则 403 AccessDenied.Unpurchased）
+
+  # A/B 候选：python -m citty.cli ab --wav out/sample.wav 会依次跑这些
+  # 实测（15.1s 英文语音，含上传耗时，2026-10-06）：SenseVoice RTF 0.161 / Qwen3-ASR-1.7B 0.173 / XingChen 0.304
+  candidates:
+    - name: sensevoice-small
+      api_style: transcriptions
+      base_url: https://api.siliconflow.cn/v1
+      api_key_env: SILICONFLOW_API_KEY
+      model: FunAudioLLM/SenseVoiceSmall
+      language: null
+    - name: qwen3-asr-1.7b
+      api_style: transcriptions
+      base_url: https://api.siliconflow.cn/v1
+      api_key_env: SILICONFLOW_API_KEY
+      model: Qwen/Qwen3-ASR-1.7B
+      language: null
+    - name: xingchen-asr-v3.2
+      api_style: transcriptions
+      base_url: https://api.siliconflow.cn/v1
+      api_key_env: SILICONFLOW_API_KEY
+      model: XingChenAGI/XingChenASR-V3.2
+      language: null
+    # —— 以下两家需要各自平台的 key，拿到后取消注释即可参与 A/B ——
+    # - name: whisper-large-v3-turbo
+    #   api_style: transcriptions
+    #   base_url: https://api.groq.com/openai/v1
+    #   api_key_env: GROQ_API_KEY
+    #   model: whisper-large-v3-turbo
+    # - name: qwen3-asr-flash
+    #   api_style: chat_audio
+    #   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    #   api_key_env: DASHSCOPE_API_KEY
+    #   model: qwen3-asr-flash
+    #   data_style: auto
+    #   itn: true
+
+mt:
+  # bilibili_free（免费、无需 key）| mock | openai_compat
+  backend: bilibili_free
+  source_lang: auto          # auto | en | zh
+  target_lang: zh-Hans       # zh-Hans | zh-Hant | en | ja | ko | es | fr | de | ru ...
+  context_sentences: 3       # 修正 pass 与上下文翻译用到的前文句数
+  glossary: {}               # 术语强约束，例：{"carbon fiber": "碳纤维", "cracking": "开裂"}
+  corrector:
+    enabled: true
+    delay_s: 0.4             # 整句结束后多久做一次带上下文的重译（0 = 关闭）
+  bilibili_free:
+    base_url: https://index-translate.bilibili.com/v1
+    model: Index-Translate-35B-A3B
+    timeout_s: 30
+  openai_compat:
+    base_url: https://api.deepseek.com/v1
+    api_key_env: DEEPSEEK_API_KEY
+    model: deepseek-chat
+    timeout_s: 30
+
+tts:
+  # edge = 免费、零 key、零模型权重（P2 影子配音默认）| mock = 本地静音占位（验证流水线用）
+  # 用法：.\run.ps1 say "要合成的文本" -o out\x.mp3
+  backend: edge
+  edge:
+    voice: zh-CN-YunxiNeural   # say --list-voices 可看全部；中文 14 个（含辽宁话/陕西话/粤语/台湾）
+    rate: "+0%"                # 语速，如 +10% / -10%
+
+overlay:
+  mode: bilingual            # src | tgt | bilingual
+  font_family: Microsoft YaHei UI
+  tgt_font_size: 26
+  src_font_size: 16
+  width_pct: 0.62            # 字幕窗宽度占屏幕比例
+  bottom_margin_px: 96
+  alpha: 0.92
+
+logging:
+  level: INFO
+  save_srt: true
+  srt_dir: out

@@ -1,0 +1,46 @@
+{
+  "wav": "D:\\Citty\\out\\samples\\official_zh.wav",
+  "seconds": 4.2039375,
+  "gpu": "无 CUDA（跑在 CPU 上）",
+  "rows": [
+    {
+      "model": "dry-run",
+      "device": "-",
+      "load_s": 0.0,
+      "ms_best": 0,
+      "rtf_best": 0.0,
+      "ms_median": 0,
+      "text": "甚至出现交易几乎停滞的情况错",
+      "metric": "CER(字)",
+      "value": 0.0769,
+      "errors": 1,
+      "ref_len": 13
+    },
+    {
+      "model": "dry-run",
+      "device": "-",
+      "load_s": 0.0,
+      "ms_best": 0,
+      "rtf_best": 0.0,
+      "ms_median": 0,
+      "text": "甚至出现交易几乎停滞的情况错",
+      "metric": "CER(字)",
+      "value": 0.0769,
+      "errors": 1,
+      "ref_len": 13
+    },
+    {
+      "model": "dry-run",
+      "device": "-",
+      "load_s": 0.0,
+      "ms_best": 0,
+      "rtf_best": 0.0,
+      "ms_median": 0,
+      "text": "甚至出现交易几乎停滞的情况错",
+      "metric": "CER(字)",
+      "value": 0.0769,
+      "errors": 1,
+      "ref_len": 13
+    }
+  ]
+}
