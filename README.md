@@ -16,7 +16,7 @@
 
 **三条硬约束**：① 8GB 显存装不下 ASR+MT+TTS+路由，必须分档 + 云端兜底；② 实时配音的物理下限是 2~5s/句；③ AI 配音有强制标识与声音权的合规要求。
 
-**执行顺序（2026 调整后）**：**P1 ✅ → P3-a 埋点 → P4 多语种（先只做字幕）→ P3-b 路由生效 → P2-a 离线配音 → P2-b 实时配音**。
+**执行顺序（2026 调整后）**：**P1 ✅ → P3-a ✅ 埋点已落地 → P4 多语种（先只做字幕）→ P3-b 路由生效 → P2-a 离线配音 → P2-b 实时配音**。
 配音整体推后（TTS 选型由用户自行决定）；前置项是**第二个真实 MT 模型**（单模型无从路由）。理由、代价与依赖核查见 [04-路线图与风险](docs/04-路线图与风险.md)。
 
 ---
@@ -40,6 +40,7 @@
 | [13-P1本地部署最简方案](docs/13-P1本地部署最简方案.md) | **已跑通**：P1 本地化只要 **1 个 228MB 文件 + `pip install sherpa-onnx`**，CPU 上 RTF **0.021**、中文 CER **0.0**；13.5 秒是延迟悬崖；踩到的 3 个坑 |
 | [14-P1验收与测试](docs/14-P1验收与测试.md) | **P1 已验收**：完工定义逐条对照、`.\test-p1.ps1` 四步自测法（含实时链路）、排障表、还没覆盖的边界 |
 | [15-一小时长测记录](docs/15-一小时长测记录.md) | **62 分钟真实视频连续跑**：992 段零崩溃、内存不涨、免费接口 994 次无限流；长测挖出的标签碎片 bug（9.1% → 0%）与根因定位全过程 |
+| [16-P3a路由埋点](docs/16-P3a路由埋点.md) | **P3-a 已落地**：领域路由只采集不改行为；15 个领域的关键词打分表、置信度标定（单命中不认领域）、JSONL 字段与 `citty routes` 报表；实测埋点开销 p50 **0.1ms** |
 
 **远端部署脚手架**（`deploy/`，已写好，租到机器就能用）：
 
@@ -90,6 +91,17 @@ D:\Citty\.venv\Scripts\python.exe -m pip install sherpa-onnx    # 28MB，不是 
 .\test-p1.ps1                                                   # 一键四步验收（P1 已 PASS）
 .\run.ps1 -Config D:\Citty\config.local.yaml doctor
 .\run.ps1 -Config D:\Citty\config.local.yaml file out\samples\official_en.wav 18
+.\run.ps1 -Config D:\Citty\config.local.yaml routes             # P3-a：看领域分布与埋点开销
+```
+
+**领域埋点（P3-a，只记录不改行为）**：跑任何一次会话都会往 `out/routing/<session_id>.jsonl`
+写逐段记录（`domain_guess` / `asr_text` / `mt_text` / `model_used` / `latency` / `rev`），
+`routes` 命令把它汇总成「领域 × 修正率 × 延迟」表 —— 这就是 P3-b 分模型的决策依据。
+带上视频元数据（标题/UP主/分区）判断会准得多（正文单独判不出时，元数据能直接定领域）：
+
+```powershell
+'{"title":"显卡评测","uploader":"某某","partition":"数码"}' | Set-Content -Encoding UTF8 out\meta.json
+.\run.ps1 -Config D:\Citty\config.local.yaml file out\samples\official_en.wav 30 --meta out\meta.json
 ```
 
 | 实测项 | 结果 |
@@ -104,6 +116,7 @@ D:\Citty\.venv\Scripts\python.exe -m pip install sherpa-onnx    # 28MB，不是 
 | 远端配置（SSH 隧道那套） | ✅ 用替身服务实测：6 段 / 6 句翻译 / 0 报错 |
 | 系统声音捕获 | ✅ WASAPI loopback 实拍验证，VAD 正确切出 2/2 段 |
 | **62 分钟长测（连续跑）** | ✅ **992 段 / 992 译 / 0 丢弃 / 1 次瞬时错误**，内存 408→331MB（无泄漏）、CPU 均值 4%、免费接口 994 次请求无限流 |
+| **P3-a 路由埋点** | ✅ 逐段 JSONL 字段齐全、`routes` 报表可读；**埋点自身开销 p50 0.1ms / p95 0.2ms**（端到端 645ms，可忽略）；加埋点后 `test-p1.ps1` 仍 **PASS** |
 | 前端协议 | ✅ WebSocket 事件流（partial/stable/final + rev 修订）字段齐全 |
 | 磁盘 | 项目本体 **7MB**；唯一下载的模型是本地 ASR 的 **228MB** |
 

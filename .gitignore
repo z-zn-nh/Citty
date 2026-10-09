@@ -22,6 +22,7 @@ models/
 *.m4a
 out/samples/
 out/_*
+out/routing/
 *.log
 logs/
 

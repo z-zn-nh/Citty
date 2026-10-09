@@ -49,6 +49,14 @@ segmenter:
   max_speech_ms: 12000
   silence_ms: 420
 
+router:
+  # P3-a 领域埋点：只判断与记录，不改变翻译行为（默认就跟 config.yaml 一致，这里写出来是为了能一眼看到）
+  backend: heuristic           # heuristic | none
+  min_confidence: 0.50         # 至少两个关键词命中才认领域；单命中记 default（标定依据见 docs/16）
+  hysteresis: 2
+  log:
+    enabled: true              # 写 out/routing/<session_id>.jsonl（该目录不进 git）
+
 overlay:
   mode: bilingual
   font_family: Microsoft YaHei UI

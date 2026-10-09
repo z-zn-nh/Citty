@@ -117,6 +117,8 @@ def main(argv: list[str] | None = None) -> int:
     p_file.add_argument("path")
     p_file.add_argument("--seconds", type=float, default=60.0)
     p_file.add_argument("--no-loop", action="store_true")
+    p_file.add_argument("--meta", default=None,
+                        help="视频元数据 JSON（title/uploader/tags/partition），喂给领域路由器")
 
     p_tr = sub.add_parser("translate", help="单独测试翻译后端")
     p_tr.add_argument("text")
@@ -139,6 +141,11 @@ def main(argv: list[str] | None = None) -> int:
     p_say.add_argument("-o", "--out", default=None)
     p_say.add_argument("--list-voices", action="store_true", help="列出可用语音（可配合前缀过滤）")
     p_say.add_argument("--voice-prefix", default="")
+
+    p_routes = sub.add_parser("routes", help="P3-a 路由埋点报表：领域分布 / 质量 / 埋点开销")
+    p_routes.add_argument("--dir", default=None, help="路由日志目录（默认 out/routing）")
+    p_routes.add_argument("--session", default=None, help="只看文件名含该串的会话")
+    p_routes.add_argument("--json", action="store_true", help="输出机器可读 JSON")
 
     args = ap.parse_args(argv)
 
@@ -200,6 +207,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {s['t_start']:6.2f}-{s['t_end']:6.2f}s  {s['text'][:40]}")
         return 0
 
+    if args.cmd == "routes":
+        from .routing_log import format_report, summarize
+
+        log_dir = args.dir or str(Path(cfg["_out_dir"]) / "routing")
+        summary = summarize(log_dir, session=args.session)
+        if args.json:
+            print(json.dumps(summary, ensure_ascii=False, indent=2))
+        else:
+            print(format_report(summary))
+        return 0
+
     if args.cmd == "selftest":
         return asyncio.run(_run_selftest(cfg, args.seconds))
 
@@ -207,6 +225,15 @@ def main(argv: list[str] | None = None) -> int:
         cfg["audio"]["source"] = "file"
         cfg["audio"]["file"] = str(Path(args.path).resolve())
         cfg["audio"]["loop_file"] = not args.no_loop
+        if args.meta:
+            try:
+                # 用 utf-8-sig：Windows 上用记事本/PowerShell 存的 JSON 常带 BOM，
+                # 按 utf-8 读会在第一个字符就炸（json 报 "Expecting value: line 1 column 1"）。
+                cfg.setdefault("router", {})["meta"] = json.loads(
+                    Path(args.meta).read_text(encoding="utf-8-sig"))
+                print(f"元数据已注入: {cfg['router']['meta']}")
+            except Exception as exc:
+                print(f"⚠ --meta 读取失败（忽略，用配置里的 meta）: {exc}")
         return asyncio.run(_run_selftest(cfg, args.seconds))
 
     if args.cmd == "run":

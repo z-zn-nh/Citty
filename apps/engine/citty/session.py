@@ -13,6 +13,8 @@ from .audio import make_source
 from .config import Config
 from .hub import Hub
 from .mt import make_mt
+from .router import make_router
+from .routing_log import RoutingLog
 from .segmenter import make_segmenter
 from .types import Segment, SpeechSegment, now_ms, to_srt
 
@@ -28,6 +30,10 @@ class Session:
         self.segmenter = make_segmenter(cfg)
         self.asr = make_asr(cfg)
         self.mt = make_mt(cfg)
+        # P3-a：领域埋点。只判断与记录，**不影响任何翻译决策**。
+        self.router = make_router(cfg)
+        self.meta: dict = dict(cfg.get_path("router.meta", {}) or {})
+        self.routing = RoutingLog(cfg)
 
         self.src_lang = str(cfg.get_path("mt.source_lang", "auto"))
         self.tgt_lang = str(cfg.get_path("mt.target_lang", "zh-Hans"))
@@ -40,6 +46,7 @@ class Session:
         self.segments: dict[str, Segment] = {}
         self.order: list[str] = []
         self.stats = {"segments": 0, "translated": 0, "dropped": 0, "errors": 0}
+        self._last_domain: str | None = None
         self._audio_q: queue.Queue = queue.Queue(maxsize=64)
         self._stop = threading.Event()
         self._worker: asyncio.Task | None = None
@@ -57,15 +64,17 @@ class Session:
         self._started = True
         threading.Thread(target=self._capture_loop, name="capture", daemon=True).start()
         self._worker = asyncio.create_task(self._worker_loop(), name="pipeline")
+        self.routing.open_session(self)
         self.publish_session()
-        log.info("会话启动: asr=%s mt=%s source=%s", self.asr.name, self.mt.name,
-                 self.cfg.get_path("audio.source"))
+        log.info("会话启动: asr=%s mt=%s source=%s router=%s", self.asr.name, self.mt.name,
+                 self.cfg.get_path("audio.source"), self.router.name)
 
     async def stop(self) -> None:
         self._stop.set()
         if self._worker:
             self._worker.cancel()
         self.source.close()
+        self.routing.close()
 
     # ------------------------------------------------------------------ #
     def _capture_loop(self) -> None:
@@ -143,6 +152,7 @@ class Session:
             self.stats["dropped"] += 1
             seg.stability = "final"
             self._emit(seg)
+            self._routing_log(seg, self.router.decide("", self.meta), "skipped")
             return
         try:
             asr = await asyncio.to_thread(self.asr.transcribe, speech.pcm, self.sr, speech.t_start)
@@ -152,6 +162,7 @@ class Session:
             self._asr_failed(exc)
             seg.stability = "final"
             self._emit(seg)
+            self._routing_log(seg, self.router.decide("", self.meta), "asr_failed")
             return
 
         seg.src = asr.text.strip()
@@ -159,20 +170,37 @@ class Session:
         seg.latency_ms["asr"] = round(asr.latency_ms, 1)
         seg.stability = "stable"
         self._emit(seg)
+
+        # P3-a 埋点：判领域、写进 Segment.domain 并落盘。
+        # 注意这里**只记录**：下面用哪个翻译模型完全和 domain 无关（那是 P3-b 的事）。
+        decision = self.router.decide(seg.src, self.meta)
+        seg.domain = decision.stable
+
         if not seg.src:
             seg.stability = "final"
             self._emit(seg)
+            self._routing_log(seg, decision, "asr_only")
             return
 
         # 2) MT（带前文上下文）
         ctx = self._context_before(seg)
         await self._translate(seg, ctx, final=True)
+        self._routing_log(seg, decision, "mt")
 
         # 3) 修正 pass：整句结束后用上下文重译一次，质量更高（同 id 覆盖）
         if self.corrector_on and self.corrector_delay > 0:
             await asyncio.sleep(self.corrector_delay)
             ctx2 = self._context_before(seg, extra=1)
             await self._translate(seg, ctx2, final=True, correction=True)
+            self._routing_log(seg, decision, "correction")
+
+    def _routing_log(self, seg: Segment, decision, phase: str) -> None:
+        """埋点落盘。异常绝不允许影响翻译，所以整体兜住。"""
+        self._last_domain = getattr(decision, "stable", None)
+        try:
+            self.routing.write(seg, decision, phase=phase, stats=self.stats)
+        except Exception:  # pragma: no cover
+            log.exception("路由埋点写入异常（已忽略，不影响翻译）")
 
     async def _translate(self, seg: Segment, ctx: Sequence[str],
                          final: bool = False, correction: bool = False) -> None:
@@ -242,6 +270,9 @@ class Session:
             "corrector": self.corrector_on,
             "clients": self.hub.connected,
             "stats": self.stats,
+            "domain": getattr(self, "_last_domain", None),
+            "router": self.router.name,
+            "routing": self.routing.status(),
         }
 
     def srt(self, bilingual: bool = True, final_only: bool = True) -> str:

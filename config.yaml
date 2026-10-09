@@ -1,4 +1,4 @@
-# Citty 配置 · 默认全部走云端，不下载任何本地模型
+﻿# Citty 配置 · 默认全部走云端，不下载任何本地模型
 server:
   host: 127.0.0.1
   port: 8756
@@ -103,6 +103,28 @@ tts:
   edge:
     voice: zh-CN-YunxiNeural   # say --list-voices 可看全部；中文 14 个（含辽宁话/陕西话/粤语/台湾）
     rate: "+0%"                # 语速，如 +10% / -10%
+
+router:
+  # P3-a 领域埋点：**只判断与记录，不改变任何翻译行为**（那是 P3-b 的事）
+  #   heuristic = 关键词+元数据打分（零模型、微秒级）
+  #   none      = 完全关闭埋点
+  backend: heuristic
+  # 置信度标定（见 docs/16）：单个词命中 = 0.44，两个词 = 0.62，三个词 = 0.81，
+  # 一个多词短语 ≈ 0.59。所以 0.50 的效果是「至少两个词命中才算认出领域」，
+  # 单个词（如 "patient" 既可能是病人也可能是耐心的）一律记成 default，宁缺勿滥。
+  min_confidence: 0.50
+  hysteresis: 2            # 连续 N 次同一猜测才改判（防止领域来回跳）
+  history_chars: 4000      # 累加正文的长度上限（越长越准，也越慢一点点）
+  meta_weight: 3.0         # 标题/UP主里的关键词权重（比正文可信）
+  extra_keywords: {}       # 自定义领域词，例：{"medical": ["靶向治疗", "化疗"]}
+  meta:
+    # 当前视频的元数据（喂给路由器，权重更高）。跑 B 站视频时可手工填或由前端传入。
+    title: null
+    uploader: null
+    tags: null
+    partition: null
+  log:
+    enabled: true          # 默认落盘到 out/routing/<session_id>.jsonl（该目录不进 git）
 
 overlay:
   mode: bilingual            # src | tgt | bilingual
